@@ -43,6 +43,12 @@ survives too (it is detached).
 | socket | unix socket | unix socket | named pipe |
 | daemon restart | **adopted** if pid+start token+boot id match, else **`lost`** | idem | idem |
 
+> **Windows status:** the named-pipe, `taskkill /T` and
+> `pause = not_supported` paths are implemented, but the real-process suite
+> is not yet CI-green on Windows (the runner keeps a crashed daemon's pipe
+> bound long enough to break the adoption tests). CI covers Linux and macOS;
+> treat Windows as experimental until the follow-up lands.
+
 Windows has no SIGSTOP and no graceful SIGTERM for console processes:
 `pause` says `not_supported`, `stop` is `taskkill /T` then `/F`. It never
 pretends to have paused something.
