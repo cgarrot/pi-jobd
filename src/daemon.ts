@@ -124,7 +124,7 @@ export class JobDaemon {
         break;
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
-        if (code === "EADDRINUSE" && attempt < 20) {
+        if (code === "EADDRINUSE" && attempt < 50) {
           await sleep(100);
           continue;
         }

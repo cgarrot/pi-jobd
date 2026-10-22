@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { JobDaemon } from "../src/daemon.js";
 import { JobRegistry } from "../src/registry.js";
@@ -15,7 +16,8 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 // Cross-platform long-running commands: `sleep` does not exist in cmd.exe.
 const LONG = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 10";
-const LONG_ECHO = isWindows ? `node -e "console.log('hello-job');setTimeout(()=>{},10000)"` : "echo hello-job; sleep 10";
+const ECHO_FIXTURE = fileURLToPath(new URL("../../test/fixtures/echo.mjs", import.meta.url));
+const LONG_ECHO = isWindows ? `node "${ECHO_FIXTURE}" hello-job 10000` : "echo hello-job; sleep 10";
 const SHORT = isWindows ? "ping -n 2 127.0.0.1 >nul" : "sleep 1";
 
 interface Harness {

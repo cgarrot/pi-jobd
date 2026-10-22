@@ -4,13 +4,15 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "node:test";
 import { registerJobTools } from "../src/extension/tools.js";
 import { JobdClient } from "../src/client.js";
 import type { ExtensionAPI, SessionContext, ToolDefinition, ToolResult } from "../src/extension/pi-types.js";
 
 const isWindows = process.platform === "win32";
-const ECHO_JOB = isWindows ? `node -e "console.log('ext-ok');setTimeout(()=>{},5000)"` : "echo ext-ok; sleep 5";
+const ECHO_FIXTURE = fileURLToPath(new URL("../../test/fixtures/echo.mjs", import.meta.url));
+const ECHO_JOB = isWindows ? `node "${ECHO_FIXTURE}" ext-ok 5000` : "echo ext-ok; sleep 5";
 const LONG_JOB = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 5";
 
 function cleanupDir(dir: string): void {

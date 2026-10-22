@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
 const isWindows = process.platform === "win32";
-const ECHO_JOB = isWindows ? `node -e "console.log('cli-ok');setTimeout(()=>{},5000)"` : "echo cli-ok; sleep 5";
+const ECHO_FIXTURE = fileURLToPath(new URL("../../test/fixtures/echo.mjs", import.meta.url));
+const ECHO_JOB = isWindows ? `node "${ECHO_FIXTURE}" cli-ok 5000` : "echo cli-ok; sleep 5";
 
 const CLI = fileURLToPath(new URL("../src/cli.js", import.meta.url));
 
