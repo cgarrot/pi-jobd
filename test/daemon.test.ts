@@ -15,10 +15,10 @@ import { ipcPath, isAlive, isWindows } from "../src/platform.js";
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 // Cross-platform long-running commands: `sleep` does not exist in cmd.exe.
-const LONG = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 10";
+const LONG = isWindows ? "ping -n 31 127.0.0.1 >nul" : "sleep 10";
 const ECHO_FIXTURE = fileURLToPath(new URL("../../test/fixtures/echo.mjs", import.meta.url));
 const LONG_ECHO = isWindows ? `node "${ECHO_FIXTURE}" hello-job 10000` : "echo hello-job; sleep 10";
-const SHORT = isWindows ? "ping -n 2 127.0.0.1 >nul" : "sleep 1";
+const SHORT = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 1";
 
 interface Harness {
   dir: string;
@@ -212,6 +212,10 @@ describe("daemon: adoption after a real daemon crash", () => {
     }, 3_000);
   }
 
+  async function waitAdoptable(client: JobdClient, jobId: string): Promise<void> {
+    await waitFor(async () => (await client.status(jobId))?.startToken !== undefined, 10_000);
+  }
+
   async function secondDaemon(dir: string, socketPath: string): Promise<{ daemon: JobDaemon; client: JobdClient }> {
     const daemon = new JobDaemon({ socketPath, stateDir: dir, owner: "alice", stopGraceMs: 500 });
     await daemon.start();
@@ -229,6 +233,7 @@ describe("daemon: adoption after a real daemon crash", () => {
       const job = await d1.client.run({ command: LONG });
       jobPid = job.pid;
       assert.ok(jobPid !== undefined);
+      await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
       d2 = await secondDaemon(dir, socketPath);
@@ -263,6 +268,7 @@ describe("daemon: adoption after a real daemon crash", () => {
       const job = await d1.client.run({ command: LONG });
       jobPid = job.pid;
       assert.ok(jobPid !== undefined);
+      await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
       // Simulate pid reuse: the record's start token no longer matches the pid.
@@ -304,6 +310,7 @@ describe("daemon: adoption after a real daemon crash", () => {
       assert.ok(jobPid !== undefined);
       const paused = await d1.client.pause(job.jobId);
       assert.equal(paused.status, "paused");
+      await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
       d2 = await secondDaemon(dir, socketPath);
@@ -336,6 +343,7 @@ describe("daemon: adoption after a real daemon crash", () => {
       const d1 = await detached(dir, socketPath);
       const job = await d1.client.run({ command: SHORT });
       assert.ok(job.pid !== undefined);
+      await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
       d2 = await secondDaemon(dir, socketPath);

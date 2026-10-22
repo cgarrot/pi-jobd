@@ -305,6 +305,9 @@ export class JobDaemon {
         detached: true, // own process group (POSIX) / tree (Windows)
         stdio: ["ignore", fd, fd],
         windowsHide: true,
+        // cmd.exe must see the command verbatim: Node's CRT quoting escapes
+        // inner quotes in a way cmd does not understand (node "path" ...).
+        windowsVerbatimArguments: process.platform === "win32",
         env: { ...process.env, PI_JOBD: "1", PI_JOBD_JOB_ID: jobId, PI_JOBD_OWNER: owner },
       });
     } catch (err) {
@@ -320,19 +323,32 @@ export class JobDaemon {
 
     job.pid = child.pid ?? undefined;
     job.pgid = process.platform === "win32" ? undefined : child.pid ?? undefined;
-    if (child.pid !== undefined) {
-      // Identity anchor for a future daemon restart (adoption). Best effort:
-      // an unprovable job will be marked lost, never guessed.
-      const identity = processIdentity(child.pid);
-      if (identity !== undefined) {
-        job.startToken = identity.startToken;
-        job.bootId = identity.bootId;
-      }
-    }
     job.state = "running";
     job.startedAt = nowIso();
     this.registry.save(job);
     if (child.pid !== undefined) this.children.set(jobId, child);
+
+    // Identity anchor for a future daemon restart (adoption). Captured AFTER
+    // the run response: on Windows processIdentity spawns PowerShell, and a
+    // synchronous call here made `run` time out on loaded runners. If the
+    // daemon dies before this lands, the job is unprovable -> lost (safe).
+    if (child.pid !== undefined) {
+      const identityPid = child.pid;
+      const capture = (): void => {
+        const identity = processIdentity(identityPid);
+        if (identity === undefined) return;
+        const current = this.registry.get(jobId);
+        if (current === undefined) return;
+        current.startToken = identity.startToken;
+        current.bootId = identity.bootId;
+        this.registry.save(current);
+      };
+      // /proc and ps are fast: capture BEFORE the response so the job is
+      // adoptable even if the daemon dies immediately. PowerShell is slow:
+      // on Windows capture AFTER the response (a sync call timed out `run`).
+      if (process.platform === "win32") setImmediate(capture);
+      else capture();
+    }
 
     child.on("error", (err) => {
       const current = this.registry.get(jobId);
