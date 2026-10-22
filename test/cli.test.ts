@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
 const isWindows = process.platform === "win32";
-const ECHO_JOB = isWindows ? "echo cli-ok & ping -n 6 127.0.0.1 >nul" : "echo cli-ok; sleep 5";
+const ECHO_JOB = isWindows ? `node -e "console.log('cli-ok');setTimeout(()=>{},5000)"` : "echo cli-ok; sleep 5";
 
 const CLI = fileURLToPath(new URL("../src/cli.js", import.meta.url));
 

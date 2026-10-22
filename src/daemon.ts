@@ -107,14 +107,30 @@ export class JobDaemon {
     if (this.started) return;
     mkdirSync(this.stateDir, { recursive: true, mode: 0o700 });
     unlinkEndpoint(this.socketPath);
-    this.server = createServer((socket) => this.onConnection(socket));
-    await new Promise<void>((resolveListen, rejectListen) => {
-      this.server!.once("error", rejectListen);
-      this.server!.listen(this.socketPath, () => {
-        this.server!.removeListener("error", rejectListen);
-        resolveListen();
-      });
-    });
+    // A Windows named pipe is released a moment after the owning process
+    // dies; a supervised restart after a crash can race it. Retry EADDRINUSE
+    // for a bounded ~2 s instead of failing the whole daemon.
+    for (let attempt = 0; ; attempt += 1) {
+      const server = createServer((socket) => this.onConnection(socket));
+      this.server = server;
+      try {
+        await new Promise<void>((resolveListen, rejectListen) => {
+          server.once("error", rejectListen);
+          server.listen(this.socketPath, () => {
+            server.removeListener("error", rejectListen);
+            resolveListen();
+          });
+        });
+        break;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EADDRINUSE" && attempt < 20) {
+          await sleep(100);
+          continue;
+        }
+        throw err;
+      }
+    }
     try {
       // Same-user trust boundary. Windows named pipes ignore chmod.
       const { chmodSync } = await import("node:fs");

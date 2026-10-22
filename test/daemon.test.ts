@@ -15,7 +15,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 // Cross-platform long-running commands: `sleep` does not exist in cmd.exe.
 const LONG = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 10";
-const LONG_ECHO = isWindows ? "echo hello-job & ping -n 11 127.0.0.1 >nul" : "echo hello-job; sleep 10";
+const LONG_ECHO = isWindows ? `node -e "console.log('hello-job');setTimeout(()=>{},10000)"` : "echo hello-job; sleep 10";
 const SHORT = isWindows ? "ping -n 2 127.0.0.1 >nul" : "sleep 1";
 
 interface Harness {

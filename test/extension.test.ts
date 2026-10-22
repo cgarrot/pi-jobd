@@ -10,7 +10,7 @@ import { JobdClient } from "../src/client.js";
 import type { ExtensionAPI, SessionContext, ToolDefinition, ToolResult } from "../src/extension/pi-types.js";
 
 const isWindows = process.platform === "win32";
-const ECHO_JOB = isWindows ? "echo ext-ok & ping -n 6 127.0.0.1 >nul" : "echo ext-ok; sleep 5";
+const ECHO_JOB = isWindows ? `node -e "console.log('ext-ok');setTimeout(()=>{},5000)"` : "echo ext-ok; sleep 5";
 const LONG_JOB = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 5";
 
 function cleanupDir(dir: string): void {
