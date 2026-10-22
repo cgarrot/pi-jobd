@@ -1,0 +1,44 @@
+{
+  "name": "pi-jobd",
+  "version": "0.1.0",
+  "description": "Detached local job runner for Pi — long shell work survives the agent session, with honest statuses and a same-user daemon. Zero runtime dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Clément Garrot <clement.garrot.dev@gmail.com>",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "pijob": "dist/src/cli.js"
+  },
+  "exports": {
+    ".": "./dist/src/client.js",
+    "./daemon": "./dist/src/daemon.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "dist",
+    "!dist/test",
+    "index.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node scripts/run-tests.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "ci": "npm run build && node scripts/run-tests.mjs && npm run smoke",
+    "mesh:smoke": "node scripts/mesh-control-smoke.mjs",
+    "real:cases": "node scripts/real-cases.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
