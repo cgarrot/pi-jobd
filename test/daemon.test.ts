@@ -2,7 +2,7 @@
 // The daemon runs IN-PROCESS here (the CLI test covers the detached spawn).
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -39,10 +39,10 @@ async function harness(): Promise<Harness> {
   return { dir, socketPath, daemon, client, close };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 3_000): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 3_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await sleep(25);
   }
   throw new Error("waitFor timed out");
@@ -56,14 +56,17 @@ describe("daemon: run / status / log / stop", () => {
       assert.equal(job.state, "running");
       assert.ok(job.pid !== undefined);
       await waitFor(() => isAlive(job.pid!));
-      await sleep(200); // let echo flush
+      // A loaded CI runner can take >200 ms to start bash and flush echo.
+      let log = await h.client.log(job.jobId, 5);
+      await waitFor(async () => {
+        log = await h.client.log(job.jobId, 5);
+        return log.lines.join("\n").includes("hello-job");
+      }, 4_000);
+      assert.match(log.lines.join("\n"), /hello-job/);
 
       const status = await h.client.status(job.jobId);
       assert.equal(status?.state, "running");
       assert.equal(status?.owner, "alice");
-
-      const log = await h.client.log(job.jobId, 5);
-      assert.match(log.lines.join("\n"), /hello-job/);
 
       const stopped = await h.client.stop(job.jobId);
       assert.equal(stopped.job.state, "stopped");

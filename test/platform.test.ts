@@ -13,6 +13,12 @@ describe("platform: endpoint + shell", () => {
     }
   });
 
+  it("two state dirs never share an IPC endpoint", () => {
+    const a = ipcPath("jobd", { ...process.env, PI_JOBD_STATE_DIR: "/tmp/pi-jobd-a" });
+    const b = ipcPath("jobd", { ...process.env, PI_JOBD_STATE_DIR: "/tmp/pi-jobd-b" });
+    assert.notEqual(a, b);
+  });
+
   it("shell args match the platform (never a hard-coded /bin/bash on win32)", () => {
     const { bin, args } = shellArgs("echo hi");
     if (isWindows) {

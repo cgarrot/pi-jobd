@@ -7,6 +7,7 @@
  * documented degradation instead of a fake success.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { homedir, tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
@@ -39,7 +40,11 @@ export function runtimeRoot(env: NodeJS.ProcessEnv = process.env): string {
 export function ipcPath(name: string, env: NodeJS.ProcessEnv = process.env): string {
   if (isWindows) {
     const user = userInfo().username.replace(/[^A-Za-z0-9_.-]/g, "_");
-    return `\\\\.\\pipe\\pi-jobd-${user}-${name}`;
+    // One pipe per STATE DIR, exactly like the POSIX socket path. Without
+    // this, two isolated daemons (tests, or PI_JOBD_STATE_DIR runs) fight
+    // over the same pipe and clients reach the wrong registry.
+    const scope = createHash("sha1").update(stateRoot(env)).digest("hex").slice(0, 8);
+    return `\\\\.\\pipe\\pi-jobd-${user}-${scope}-${name}`;
   }
   // macOS caps a unix socket path at ~104 chars; ~/.pi-jobd/run/xxx.sock is short.
   return join(runtimeRoot(env), `${name}.sock`);
