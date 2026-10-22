@@ -13,7 +13,7 @@ import { isAlive } from "../dist/src/platform.js";
 const isWindows = process.platform === "win32";
 const LONG = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 10";
 const ECHO_FIXTURE = fileURLToPath(new URL("../test/fixtures/echo.mjs", import.meta.url));
-const LONG_ECHO = isWindows ? `node "${ECHO_FIXTURE}" case-ok 10000` : "echo case-ok; sleep 10";
+const LONG_ECHO = isWindows ? `"${process.execPath}" "${ECHO_FIXTURE}" case-ok 10000` : "echo case-ok; sleep 10";
 const SHORT = isWindows ? "ping -n 2 127.0.0.1 >nul" : "sleep 1";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stateDir = mkdtempSync(join(tmpdir(), "pi-jobd-real-"));

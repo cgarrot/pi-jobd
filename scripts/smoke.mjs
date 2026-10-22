@@ -14,7 +14,7 @@ const env = { ...process.env, PI_JOBD_STATE_DIR: stateDir };
 const isWindows = process.platform === "win32";
 const LONG = isWindows ? "ping -n 61 127.0.0.1 >nul" : "sleep 60";
 const ECHO_FIXTURE = fileURLToPath(new URL("../test/fixtures/echo.mjs", import.meta.url));
-const ECHO_JOB = isWindows ? `node "${ECHO_FIXTURE}" smoke-ok 30000` : "echo smoke-ok; sleep 30";
+const ECHO_JOB = isWindows ? `"${process.execPath}" "${ECHO_FIXTURE}" smoke-ok 30000` : "echo smoke-ok; sleep 30";
 let passed = 0;
 let failed = 0;
 

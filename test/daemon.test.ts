@@ -17,7 +17,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // Cross-platform long-running commands: `sleep` does not exist in cmd.exe.
 const LONG = isWindows ? "ping -n 31 127.0.0.1 >nul" : "sleep 10";
 const ECHO_FIXTURE = fileURLToPath(new URL("../../test/fixtures/echo.mjs", import.meta.url));
-const LONG_ECHO = isWindows ? `node "${ECHO_FIXTURE}" hello-job 10000` : "echo hello-job; sleep 10";
+const LONG_ECHO = isWindows ? `"${process.execPath}" "${ECHO_FIXTURE}" hello-job 10000` : "echo hello-job; sleep 10";
 const SHORT = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 1";
 
 interface Harness {
@@ -236,7 +236,8 @@ describe("daemon: adoption after a real daemon crash", () => {
       await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
-      d2 = await secondDaemon(dir, socketPath);
+      const socket2 = ipcPath(`test2-${randomBytes(4).toString("hex")}`, { ...process.env, PI_JOBD_STATE_DIR: dir });
+      d2 = await secondDaemon(dir, socket2);
       const adopted = await d2.client.status(job.jobId);
       assert.equal(adopted?.state, "running");
       assert.equal(adopted?.adopted, true);
@@ -278,7 +279,8 @@ describe("daemon: adoption after a real daemon crash", () => {
       record.startToken = "reused-pid-token";
       registry.save(record);
 
-      d2 = await secondDaemon(dir, socketPath);
+      const socket2 = ipcPath(`test2-${randomBytes(4).toString("hex")}`, { ...process.env, PI_JOBD_STATE_DIR: dir });
+      d2 = await secondDaemon(dir, socket2);
       const lost = await d2.client.status(job.jobId);
       assert.equal(lost?.state, "lost");
       assert.equal(lost?.exitCode, null);
@@ -313,7 +315,8 @@ describe("daemon: adoption after a real daemon crash", () => {
       await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
-      d2 = await secondDaemon(dir, socketPath);
+      const socket2 = ipcPath(`test2-${randomBytes(4).toString("hex")}`, { ...process.env, PI_JOBD_STATE_DIR: dir });
+      d2 = await secondDaemon(dir, socket2);
       const adopted = await d2.client.status(job.jobId);
       assert.equal(adopted?.state, "paused", "adoption must not silently SIGCONT");
       assert.equal(adopted?.adopted, true);
@@ -346,7 +349,8 @@ describe("daemon: adoption after a real daemon crash", () => {
       await waitAdoptable(d1.client, job.jobId);
       await crash(d1.daemonPid);
 
-      d2 = await secondDaemon(dir, socketPath);
+      const socket2 = ipcPath(`test2-${randomBytes(4).toString("hex")}`, { ...process.env, PI_JOBD_STATE_DIR: dir });
+      d2 = await secondDaemon(dir, socket2);
       const adopted = await d2.client.status(job.jobId);
       assert.equal(adopted?.state, "running");
       assert.equal(adopted?.adopted, true);

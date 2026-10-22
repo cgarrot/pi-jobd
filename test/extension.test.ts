@@ -12,7 +12,7 @@ import type { ExtensionAPI, SessionContext, ToolDefinition, ToolResult } from ".
 
 const isWindows = process.platform === "win32";
 const ECHO_FIXTURE = fileURLToPath(new URL("../../test/fixtures/echo.mjs", import.meta.url));
-const ECHO_JOB = isWindows ? `node "${ECHO_FIXTURE}" ext-ok 5000` : "echo ext-ok; sleep 5";
+const ECHO_JOB = isWindows ? `"${process.execPath}" "${ECHO_FIXTURE}" ext-ok 5000` : "echo ext-ok; sleep 5";
 const LONG_JOB = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 5";
 
 function cleanupDir(dir: string): void {
