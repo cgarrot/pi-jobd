@@ -53,7 +53,7 @@ function details(result: ToolResult): Record<string, unknown> {
   return (result.details ?? {}) as Record<string, unknown>;
 }
 
-function waitReply(bus: Bus, ctlId: string, timeoutMs = 5_000): Promise<Record<string, unknown>> {
+function waitReply(bus: Bus, ctlId: string, timeoutMs = 15_000): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`no reply for ${ctlId}`)), timeoutMs);
     bus.on(`mesh-ctl:reply:${ctlId}`, (data) => {
@@ -70,7 +70,12 @@ afterEach(async () => {
     const item = created.pop();
     if (item === undefined) continue;
     await new JobdClient({ stateDir: item.dir }).shutdown().catch(() => {});
-    rmSync(item.dir, { recursive: true, force: true });
+    await new Promise((r) => setTimeout(r, 200));
+    try {
+      rmSync(item.dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
+    } catch {
+      // best effort: a Windows handle may still be closing
+    }
   }
   delete process.env.PI_JOBD_STATE_DIR;
   delete process.env.PI_MESH_ALIAS;

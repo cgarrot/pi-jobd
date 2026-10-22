@@ -34,7 +34,7 @@ async function harness(): Promise<Harness> {
   const client = new JobdClient({ stateDir: dir, socketPath, owner: "alice", autoStart: false });
   const close = async (): Promise<void> => {
     await daemon.close();
-    rmSync(dir, { recursive: true, force: true });
+    cleanupDir(dir);
   };
   return { dir, socketPath, daemon, client, close };
 }
@@ -46,6 +46,15 @@ async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 
     await sleep(25);
   }
   throw new Error("waitFor timed out");
+}
+
+/** Windows can keep the log/registry handles busy for a few ms after a kill. */
+function cleanupDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
+  } catch {
+    // best effort: a leftover temp dir must not fail the suite
+  }
 }
 
 describe("daemon: run / status / log / stop", () => {
@@ -238,7 +247,7 @@ describe("daemon: adoption after a real daemon crash", () => {
         }
       }
       if (d2 !== undefined) await d2.daemon.close();
-      rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     }
   });
 
@@ -276,7 +285,7 @@ describe("daemon: adoption after a real daemon crash", () => {
         }
       }
       if (d2 !== undefined) await d2.daemon.close();
-      rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     }
   });
 
@@ -313,7 +322,7 @@ describe("daemon: adoption after a real daemon crash", () => {
         }
       }
       if (d2 !== undefined) await d2.daemon.close();
-      rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     }
   });
 
@@ -339,7 +348,7 @@ describe("daemon: adoption after a real daemon crash", () => {
       assert.match(ended?.note ?? "", /unknowable/);
     } finally {
       if (d2 !== undefined) await d2.daemon.close();
-      rmSync(dir, { recursive: true, force: true });
+      cleanupDir(dir);
     }
   });
 });

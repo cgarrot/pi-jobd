@@ -9,6 +9,18 @@ import { registerJobTools } from "../src/extension/tools.js";
 import { JobdClient } from "../src/client.js";
 import type { ExtensionAPI, SessionContext, ToolDefinition, ToolResult } from "../src/extension/pi-types.js";
 
+const isWindows = process.platform === "win32";
+const ECHO_JOB = isWindows ? "echo ext-ok & ping -n 6 127.0.0.1 >nul" : "echo ext-ok; sleep 5";
+const LONG_JOB = isWindows ? "ping -n 11 127.0.0.1 >nul" : "sleep 5";
+
+function cleanupDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
+  } catch {
+    // best effort
+  }
+}
+
 const created: Array<{ dir: string }> = [];
 
 afterEach(async () => {
@@ -16,7 +28,8 @@ afterEach(async () => {
     const item = created.pop();
     if (item === undefined) continue;
     await new JobdClient({ stateDir: item.dir }).shutdown().catch(() => {});
-    rmSync(item.dir, { recursive: true, force: true });
+    await new Promise((r) => setTimeout(r, 150));
+    cleanupDir(item.dir);
   }
   delete process.env.PI_JOBD_STATE_DIR;
 });
@@ -70,7 +83,7 @@ describe("extension: registration", () => {
 describe("extension: run → status → log → stop", () => {
   it("runs a job and exposes honest states", async () => {
     const { tools, ctx } = harness();
-    const started = await call(tools, "job_run", { command: "echo ext-ok; sleep 5" }, ctx);
+    const started = await call(tools, "job_run", { command: ECHO_JOB }, ctx);
     assert.equal(details(started).status, "started");
     const jobId = details(started).jobId;
     assert.equal(typeof jobId, "string");
@@ -94,7 +107,7 @@ describe("extension: run → status → log → stop", () => {
 
   it("pause refuses a non-pausable job", async () => {
     const { tools, ctx } = harness();
-    const started = await call(tools, "job_run", { command: "sleep 5" }, ctx);
+    const started = await call(tools, "job_run", { command: LONG_JOB }, ctx);
     const jobId = details(started).jobId;
     const paused = await call(tools, "job_pause", { jobId }, ctx);
     assert.equal(details(paused).status, "not_pausable");
