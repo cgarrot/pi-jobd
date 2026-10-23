@@ -117,10 +117,16 @@ export function registerJobTools(pi: ExtensionAPI): void {
     name: "job_run",
     label: "Job Run",
     description:
-      "Start a detached local job (long build/render/sweep) and return immediately. " +
-      "The job survives this session; use job_status/job_log/job_stop to follow it. " +
-      "Equivalent trust to your own bash tool.",
+      "Start a detached local job (long build/render/test sweep/install/training) and return in ~150 ms. " +
+      "The job runs in its own process group under a per-user daemon: it survives /reload, a crash and the end " +
+      "of this session. Follow it with job_log/job_status; stop it with job_stop. Same privileges as bash.",
     promptSnippet: "Start long shell work detached instead of blocking the turn.",
+    promptGuidelines:
+      "Use job_run when the command will take more than ~60-90 s, when you must keep working while it runs, " +
+      "when it must survive /reload or session end, or when a peer may need to stop it. " +
+      "Use bash instead for short commands whose output you need to decide the next step, for interactive or " +
+      "streaming commands, and when the failure itself is the information (you want it in context now). " +
+      "After job_run, keep working; read job_log/job_status only when you actually need the result — never poll in a loop.",
     parameters: RUN_PARAMS,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const command = asString(params.command);
@@ -150,6 +156,9 @@ export function registerJobTools(pi: ExtensionAPI): void {
     label: "Job Status",
     description: "Inspect one job: state, pid, exit code/signal, duration, log path. `lost` is reported as lost.",
     promptSnippet: "Check a detached job's honest state.",
+    promptGuidelines:
+      "Read it on demand, not in a loop. `exitCode: null` means unknowable (an adopted job that ended), never 0. " +
+      "`lost` means the daemon cannot prove the pid is ours: stop/pause are refused, inspect the pid manually.",
     parameters: STATUS_PARAMS,
     async execute(_toolCallId, params) {
       const jobId = asString(params.jobId);
@@ -169,6 +178,9 @@ export function registerJobTools(pi: ExtensionAPI): void {
     label: "Job List",
     description: "List this user's jobs (newest first), including honest terminal states and `lost`.",
     promptSnippet: "List detached jobs.",
+    promptGuidelines:
+      "Use it to recover context after a /reload or a new session (a job started earlier may still be running), " +
+      "or to find the id of a job you started in a previous turn.",
     parameters: LIST_PARAMS,
     async execute() {
       try {
@@ -187,6 +199,9 @@ export function registerJobTools(pi: ExtensionAPI): void {
     label: "Job Log",
     description: "Tail a job's output log (bounded; never loads the whole file).",
     promptSnippet: "Tail a detached job's output.",
+    promptGuidelines:
+      "Fetch the tail only when you need the result or are diagnosing a failure; a running job's log is partial. " +
+      "Increase `lines` for a stack trace; the read is bounded either way.",
     parameters: LOG_PARAMS,
     async execute(_toolCallId, params) {
       const jobId = asString(params.jobId);
@@ -211,6 +226,9 @@ export function registerJobTools(pi: ExtensionAPI): void {
       "Stop a job: SIGTERM to its process group, then SIGKILL after 5 s. Windows: taskkill /T then /F. " +
       "A `lost` job is refused (we do not signal a process we cannot prove is ours).",
     promptSnippet: "Stop a detached job and its process tree.",
+    promptGuidelines:
+      "Prefer job_stop over aborting the turn (ESC) when the runaway thing is a job you started: the job dies " +
+      "and your turn survives. `already exited` means it had finished on its own before the stop.",
     parameters: STOP_PARAMS,
     async execute(_toolCallId, params) {
       const jobId = asString(params.jobId);
@@ -232,6 +250,9 @@ export function registerJobTools(pi: ExtensionAPI): void {
       "SIGSTOP a job started with pausable:true (POSIX only). A non-pausable job is refused; " +
       "Windows returns not_supported — never a fake pause.",
     promptSnippet: "Pause a pausable job (POSIX only).",
+    promptGuidelines:
+      "Only for jobs started with pausable:true, and never for git/pip/network transfers: a half-written " +
+      "transfer is worse than a slow one.",
     parameters: PAUSE_PARAMS,
     async execute(_toolCallId, params) {
       const jobId = asString(params.jobId);
@@ -250,6 +271,7 @@ export function registerJobTools(pi: ExtensionAPI): void {
     label: "Job Resume",
     description: "SIGCONT a paused job (POSIX only).",
     promptSnippet: "Resume a paused job (POSIX only).",
+    promptGuidelines: "Resume only a job you paused; `not_paused` means it was not paused (or already ended).",
     parameters: RESUME_PARAMS,
     async execute(_toolCallId, params) {
       const jobId = asString(params.jobId);

@@ -29,6 +29,9 @@ export interface ToolDefinition {
   label: string;
   description: string;
   promptSnippet?: string;
+  /** Injected guidance (always present, unlike a skill): WHEN to reach for
+   *  this tool, and what it must not be used for. */
+  promptGuidelines?: string | string[];
   parameters: Record<string, unknown>;
   execute: ToolExecuteFn;
 }
