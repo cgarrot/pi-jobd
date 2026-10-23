@@ -418,13 +418,16 @@ export class JobDaemon {
     }
   }
 
-  /** Adopted jobs have no child handle: death is observed by bounded polling. */
+  /** Adopted jobs have no child handle: death is observed by bounded polling.
+   *  The check is IDENTITY, not just liveness: kill(pid, 0) is also true for
+   *  a zombie (no reaping init) and for a reused pid — both mean the process
+   *  we watched has ended, and the outcome stays unknowable either way. */
   private startAdoptedMonitor(): void {
     if (this.adoptTimer !== null) return;
     this.adoptTimer = setInterval(() => {
       for (const job of this.registry.loadAll()) {
         if (job.adopted !== true || isTerminal(job.state)) continue;
-        if (job.pid !== undefined && isAlive(job.pid)) continue;
+        if (job.pid !== undefined && this.identityOk(job)) continue;
         job.state = job.state === "stopping" ? "stopped" : "exited";
         job.exitCode = null; // not our child: waitpid is unavailable, stay honest
         job.signal = null;
