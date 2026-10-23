@@ -6,6 +6,8 @@
  * 4 unsupported/not_pausable/not_paused. A job that is `lost` after a daemon
  * restart is reported as lost, never as stopped.
  */
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { JobdClient, JobdError } from "./client.js";
 import { DEFAULT_TAIL_LINES, MAX_TAIL_LINES } from "./limits.js";
 import { supportsPause } from "./platform.js";
@@ -244,7 +246,23 @@ async function main(argv: string[]): Promise<number> {
   }
 }
 
-const isMain = process.argv[1] !== undefined && /cli\.(js|ts)$/.test(process.argv[1]);
+/**
+ * True when this module IS the process entry point. The npm `bin` is a
+ * SYMLINK in the global prefix, so `process.argv[1]` is the symlink path,
+ * not `.../cli.js`: resolve the real path before comparing (otherwise the
+ * CLI exits silently when installed with `npm link` / `npm i -g`).
+ */
+function isEntryPoint(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href;
+  } catch {
+    return false;
+  }
+}
+
+const isMain = isEntryPoint();
 if (isMain) {
   main(process.argv.slice(2))
     .then((code) => process.exit(code))

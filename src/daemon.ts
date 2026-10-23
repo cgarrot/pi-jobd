@@ -11,10 +11,11 @@
  * MVP scope: run/status/list/stop/pause/resume/log. A daemon restart marks
  * in-flight jobs `lost` (fail-closed); adoption is a later phase.
  */
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server, type Socket } from "node:net";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { userInfo } from "node:os";
 import {
   ADOPT_POLL_MS,
@@ -611,7 +612,19 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
 }
 
-const isMain = process.argv[1] !== undefined && /daemon\.(js|ts)$/.test(process.argv[1]);
+/** Same symlink-safe entry-point check as the CLI (an installed bin is a
+ *  symlink, so argv[1] is not the real module path). */
+function isEntryPoint(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href;
+  } catch {
+    return false;
+  }
+}
+
+const isMain = isEntryPoint();
 if (isMain) {
   main().catch((err) => {
     process.stderr.write(`pi-jobd daemon failed: ${err instanceof Error ? err.message : String(err)}\n`);

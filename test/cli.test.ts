@@ -3,7 +3,7 @@
 // find/spawn it).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,28 @@ function run(args: string[], stateDir: string): { code: number | null; out: stri
   });
   return { code: res.status, out: res.stdout ?? "", err: res.stderr ?? "" };
 }
+
+describe("cli: installed bin entry point (symlink)", () => {
+  // npm installs the `pijob` bin as a SYMLINK: argv[1] is the symlink path,
+  // not .../cli.js. A basename test made the CLI exit silently when installed
+  // globally (found by `npm link`). The entry check must resolve the real path.
+  it("runs through a symlink to the compiled CLI", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-jobd-link-"));
+    const link = join(dir, "pijob");
+    try {
+      symlinkSync(CLI, link);
+      const res = spawnSync(process.execPath, [link, "--help"], {
+        encoding: "utf8",
+        timeout: 20_000,
+        env: { ...process.env, PI_JOBD_STATE_DIR: dir },
+      });
+      assert.equal(res.status, 0, res.stderr);
+      assert.match(res.stdout, /pijob — detached local job runner/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("cli: doctor + run + status + stop (auto-start)", () => {
   it("auto-starts the daemon, runs a job, reports it, stops it", async () => {
