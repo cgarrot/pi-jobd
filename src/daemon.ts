@@ -29,6 +29,7 @@ import {
 import {
   ipcPath,
   isAlive,
+  isZombie,
   killTree,
   processIdentity,
   shellArgs,
@@ -399,6 +400,19 @@ export class JobDaemon {
     return this.registry.markLost(job, note);
   }
 
+  /** A zombie has already exited (it lingers only because nobody reaped it):
+   *  the honest terminal state is `exited` with an unknowable exit code,
+   *  never `lost` (which claims the pid is live but unprovable). */
+  private markEnded(job: JobRecord, note: string): JobRecord {
+    job.state = "exited";
+    job.exitCode = null;
+    job.signal = null;
+    job.endedAt = job.endedAt ?? nowIso();
+    job.note = note;
+    this.registry.save(job);
+    return job;
+  }
+
   /**
    * Restart policy: verify, never guess. A job whose pid+start token+boot id
    * still match is ADOPTED (it may still be running); anything unprovable is
@@ -408,6 +422,10 @@ export class JobDaemon {
   private adoptOnStart(): void {
     for (const job of this.registry.loadAll()) {
       if (isTerminal(job.state)) continue;
+      if (job.pid !== undefined && isZombie(job.pid)) {
+        this.markEnded(job, "already exited (zombie, unreaped); outcome unknowable");
+        continue;
+      }
       if (job.pid !== undefined && this.identityOk(job)) {
         job.adopted = true;
         job.note = "adopted after daemon restart (process identity verified)";
@@ -447,6 +465,10 @@ export class JobDaemon {
       return this.fail(req, "identity_mismatch", `job ${job.jobId} is lost; refusing to signal an unproven pid`);
     }
     if (isTerminal(job.state)) return this.respond(req, { job, killed: false } satisfies StopData);
+    if (job.pid !== undefined && isZombie(job.pid)) {
+      const ended = this.markEnded(job, "already exited (zombie, unreaped); outcome unknowable");
+      return this.respond(req, { job: ended, killed: false } satisfies StopData);
+    }
     if (!this.canSignal(job)) {
       const lost = this.markLost(job, "refusing to signal: process identity not proven (pid gone or reused)");
       return this.fail(req, "identity_mismatch", `job ${job.jobId} is ${lost.state}; refusing to signal an unproven pid`);
@@ -525,6 +547,10 @@ export class JobDaemon {
     if (job.state !== "running" || job.pid === undefined) {
       return this.respond(req, { job, status: "not_running" } satisfies PauseData);
     }
+    if (isZombie(job.pid)) {
+      const ended = this.markEnded(job, "already exited (zombie, unreaped); outcome unknowable");
+      return this.respond(req, { job: ended, status: "not_running" } satisfies PauseData);
+    }
     if (!this.canSignal(job)) {
       const lost = this.markLost(job, "refusing to signal: process identity not proven (pid gone or reused)");
       return this.fail(req, "identity_mismatch", `job ${job.jobId} is ${lost.state}; refusing to SIGSTOP an unproven pid`);
@@ -546,6 +572,10 @@ export class JobDaemon {
     }
     if (job.state !== "paused" || job.pid === undefined) {
       return this.respond(req, { job, status: "not_paused" } satisfies PauseData);
+    }
+    if (isZombie(job.pid)) {
+      const ended = this.markEnded(job, "already exited (zombie, unreaped); outcome unknowable");
+      return this.respond(req, { job: ended, status: "not_paused" } satisfies PauseData);
     }
     if (!this.canSignal(job)) {
       const lost = this.markLost(job, "refusing to signal: process identity not proven (pid gone or reused)");

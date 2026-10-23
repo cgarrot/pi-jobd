@@ -160,7 +160,10 @@ async function main(argv: string[]): Promise<number> {
         }
         const data = await client.stop(jobId);
         if (json) printJson(data);
-        else process.stdout.write(`${data.killed ? "killed" : "stopped"} ${jobLine(data.job)}\n`);
+        else {
+          const verb = data.job.state === "exited" ? "already exited" : data.killed ? "killed" : "stopped";
+          process.stdout.write(`${verb} ${jobLine(data.job)}\n`);
+        }
         return EXIT_OK;
       }
       case "pause": {

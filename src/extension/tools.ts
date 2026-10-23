@@ -217,10 +217,8 @@ export function registerJobTools(pi: ExtensionAPI): void {
       if (jobId === undefined) return textResult("error: jobId is required", details({ status: "error" }));
       try {
         const data = await new JobdClient().stop(jobId);
-        return textResult(
-          `${data.killed ? "killed" : "stopped"} ${jobLine(data.job)}`,
-          jobDetails(data.job, "stopped"),
-        );
+        const verb = data.job.state === "exited" ? "already exited" : data.killed ? "killed" : "stopped";
+        return textResult(`${verb} ${jobLine(data.job)}`, jobDetails(data.job, data.job.state));
       } catch (err) {
         return errorResult(err);
       }

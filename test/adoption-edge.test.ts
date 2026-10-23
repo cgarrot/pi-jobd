@@ -6,7 +6,7 @@
 // path. Skips are visible with reasons, never silent early-returns.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,7 +22,13 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 // Cross-platform long-running command (cmd.exe has no sleep binary).
 const LONG = isWindows ? "ping -n 31 127.0.0.1 >nul" : "sleep 30";
-const SLEEP_FIXTURE = fileURLToPath(new URL("./fixtures/sleep.mjs", import.meta.url));
+// Compiled tests live in dist/test; resolve the repo fixture first, then the
+// source-relative path (for a direct TS run).
+const FIXTURE_CANDIDATES = [
+  fileURLToPath(new URL("../../test/fixtures/sleep.mjs", import.meta.url)),
+  fileURLToPath(new URL("./fixtures/sleep.mjs", import.meta.url)),
+];
+const SLEEP_FIXTURE = FIXTURE_CANDIDATES.find((p) => existsSync(p)) ?? FIXTURE_CANDIDATES[0]!;
 
 const IS_LINUX = process.platform === "linux";
 const LINUX_ONLY = IS_LINUX ? false : "needs Linux /proc (zombie state / stat parsing)";
@@ -182,6 +188,28 @@ async function successorDaemon(dir: string): Promise<{ daemon: JobDaemon; client
   return { daemon, client, socketPath };
 }
 
+
+/** Adopt a genuinely-alive held child, then let it die into a zombie. */
+async function adoptHeldChild(
+  dir: string,
+  jobId: string,
+  pausable = false,
+): Promise<{
+  holder: ChildProcess;
+  childPid: number;
+  daemon: JobDaemon;
+  client: JobdClient;
+}> {
+  const { holder, childPid } = await spawnHeldChild();
+  craftRecord(dir, { jobId, pid: childPid, pausable });
+  const socketPath = ipcPath(`t-${randomBytes(4).toString("hex")}`, { ...process.env, PI_JOBD_STATE_DIR: dir });
+  const daemon = new JobDaemon({ socketPath, stateDir: dir, owner: "alice" });
+  await daemon.start();
+  const client = new JobdClient({ stateDir: dir, socketPath, owner: "alice", autoStart: false });
+  await waitFor(() => daemon.registry.get(jobId)?.adopted === true);
+  return { holder, childPid, daemon, client };
+}
+
 describe("adoption edge: pid-reuse signal guards (real processes)", () => {
   it("a reused pid is never SIGCONTed: resume re-proves identity and fails closed", { skip: POSIX_ONLY }, async () => {
     const dir = mkdtempSync(join(tmpdir(), "pi-jobd-reuse-resume-"));
@@ -267,7 +295,7 @@ describe("adoption edge: pid-reuse signal guards (real processes)", () => {
 });
 
 describe("adoption edge: zombies under a non-reaping init (containers)", () => {
-  it("a zombie at daemon start is never adopted — already dead, not ours", { skip: LINUX_ONLY }, async () => {
+  it("a zombie at daemon start is classified exited, not lost", { skip: LINUX_ONLY }, async () => {
     const { holder, zombiePid } = await spawnZombie();
     const dir = mkdtempSync(join(tmpdir(), "pi-jobd-zombie-load-"));
     let daemon: JobDaemon | undefined;
@@ -276,7 +304,9 @@ describe("adoption edge: zombies under a non-reaping init (containers)", () => {
       const socketPath = ipcPath(`t-${randomBytes(4).toString("hex")}`, { ...process.env, PI_JOBD_STATE_DIR: dir });
       daemon = new JobDaemon({ socketPath, stateDir: dir, owner: "alice" });
       await daemon.start();
-      assert.equal(daemon.registry.get("j_zombie_load")?.state, "lost", "a zombie has already exited; adopting it would be a lie");
+      const ended = daemon.registry.get("j_zombie_load");
+      assert.equal(ended?.state, "exited", "a zombie has already exited; lost would claim a live unprovable pid");
+      assert.equal(ended?.exitCode, null, "not our child: the outcome is unknowable, never invented");
     } finally {
       if (daemon !== undefined) await daemon.close();
       killPid(holder.pid);
@@ -304,6 +334,67 @@ describe("adoption edge: zombies under a non-reaping init (containers)", () => {
     } finally {
       if (daemon !== undefined) await daemon.close();
       killPid(holder.pid);
+      cleanupDir(dir);
+    }
+  });
+
+  it("stop on an adopted zombie is exited, not lost", { skip: LINUX_ONLY }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-jobd-zombie-stop-"));
+    let adopted: Awaited<ReturnType<typeof adoptHeldChild>> | undefined;
+    try {
+      adopted = await adoptHeldChild(dir, "j_zombie_stop");
+      killPid(adopted.childPid);
+      await waitFor(() => procState(adopted!.childPid) === "Z");
+      const stopped = await adopted.client.stop("j_zombie_stop");
+      assert.equal(stopped.job.state, "exited", "a zombie is already ended, not lost");
+      assert.equal(stopped.job.exitCode, null);
+    } finally {
+      if (adopted !== undefined) {
+        await adopted.daemon.close();
+        killPid(adopted.holder.pid);
+      }
+      cleanupDir(dir);
+    }
+  });
+
+  it("pause on an adopted zombie is exited, not lost", { skip: LINUX_ONLY }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-jobd-zombie-pause-"));
+    let adopted: Awaited<ReturnType<typeof adoptHeldChild>> | undefined;
+    try {
+      adopted = await adoptHeldChild(dir, "j_zombie_pause", true);
+      killPid(adopted.childPid);
+      await waitFor(() => procState(adopted!.childPid) === "Z");
+      const paused = await adopted.client.pause("j_zombie_pause");
+      assert.equal(paused.status, "not_running");
+      assert.equal(paused.job.state, "exited", "a zombie is already ended, not lost");
+      assert.equal(paused.job.exitCode, null);
+    } finally {
+      if (adopted !== undefined) {
+        await adopted.daemon.close();
+        killPid(adopted.holder.pid);
+      }
+      cleanupDir(dir);
+    }
+  });
+
+  it("resume on an adopted zombie is exited, not lost", { skip: LINUX_ONLY }, async () => {
+    const dir = mkdtempSync(join(tmpdir(), "pi-jobd-zombie-resume-"));
+    let adopted: Awaited<ReturnType<typeof adoptHeldChild>> | undefined;
+    try {
+      adopted = await adoptHeldChild(dir, "j_zombie_resume", true);
+      const paused = await adopted.client.pause("j_zombie_resume");
+      assert.equal(paused.status, "paused");
+      killPid(adopted.childPid);
+      await waitFor(() => procState(adopted!.childPid) === "Z");
+      const resumed = await adopted.client.resume("j_zombie_resume");
+      assert.equal(resumed.status, "not_paused");
+      assert.equal(resumed.job.state, "exited", "a zombie is already ended, not lost");
+      assert.equal(resumed.job.exitCode, null);
+    } finally {
+      if (adopted !== undefined) {
+        await adopted.daemon.close();
+        killPid(adopted.holder.pid);
+      }
       cleanupDir(dir);
     }
   });
@@ -369,7 +460,7 @@ describe("adoption edge: daemon close and paused jobs", () => {
       const job = await client.run({ command: "sleep 1", pausable: true });
       assert.equal((await client.pause(job.jobId)).status, "paused");
       await daemon.close();
-      await waitFor(() => daemon.registry.get(job.jobId)?.state === "exited", 5_000);
+      await waitFor(() => daemon.registry.get(job.jobId)?.state === "exited", 5_000 * CI_SCALE);
       assert.equal(daemon.registry.get(job.jobId)?.exitCode, 0);
     } finally {
       await daemon.close();
