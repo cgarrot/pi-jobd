@@ -168,9 +168,10 @@ export function processIdentity(pid: number): ProcessIdentity | undefined {
       return { startToken, bootId: boot };
     }
     if (process.platform === "darwin") {
-      // Same zombie tell as Linux, via ps: Z means already exited.
+      // Same zombie tell as Linux, via ps: Z means already exited. BSD ps may
+      // append a suffix (e.g. "Z+"), so prefix-match instead of equality.
       const state = execFileSync("ps", ["-o", "state=", "-p", String(pid)], { encoding: "utf8" }).trim();
-      if (state === "Z") return undefined;
+      if (state.startsWith("Z")) return undefined;
       const startToken = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
       const boot = bootId();
       if (startToken === "" || boot === undefined) return undefined;

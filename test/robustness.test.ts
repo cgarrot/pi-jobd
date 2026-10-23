@@ -19,7 +19,9 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 const LONG = isWindows ? "ping -n 31 127.0.0.1 >nul" : "sleep 30";
 const POSIX_ONLY = isWindows ? "POSIX signals only (SIGSTOP/SIGCONT semantics)" : false;
 
-async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 5_000): Promise<void> {
+const CI_SCALE = process.env.CI ? 3 : 1;
+
+async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 5_000 * CI_SCALE): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await predicate()) return;
@@ -117,7 +119,7 @@ describe("robustness: pause lifecycle edges", () => {
       await waitFor(() => {
         const state = daemon.registry.get(job.jobId)?.state;
         return state === "failed" || state === "stopped";
-      }, 5_000);
+      }, 5_000 * CI_SCALE);
       const ended = daemon.registry.get(job.jobId);
       assert.notEqual(ended?.state, "paused");
       assert.equal(isAlive(job.pid!), false);

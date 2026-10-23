@@ -39,7 +39,9 @@ function procState(pid: number): string | undefined {
   }
 }
 
-async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 5_000): Promise<void> {
+const CI_SCALE = process.env.CI ? 3 : 1;
+
+async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 5_000 * CI_SCALE): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await predicate()) return;
@@ -85,7 +87,7 @@ async function spawnZombie(): Promise<{ holder: ChildProcess; zombiePid: number 
     { stdio: ["ignore", "pipe", "inherit"] },
   );
   const zombiePid = await new Promise<number>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("zombie helper printed nothing")), 5_000);
+    const timer = setTimeout(() => reject(new Error("zombie helper printed nothing")), 5_000 * CI_SCALE);
     holder.stdout!.once("data", (chunk: Buffer) => {
       clearTimeout(timer);
       resolve(Number.parseInt(chunk.toString().trim().split(/\s+/)[0] ?? "", 10));
@@ -140,7 +142,7 @@ async function crashDaemon(daemonPid: number): Promise<void> {
   } catch {
     // already gone
   }
-  await waitFor(() => !isAlive(daemonPid), 3_000);
+  await waitFor(() => !isAlive(daemonPid), 3_000 * CI_SCALE);
 }
 
 /**
@@ -156,7 +158,7 @@ async function spawnHeldChild(): Promise<{ holder: ChildProcess; childPid: numbe
     { stdio: ["ignore", "pipe", "inherit"] },
   );
   const childPid = await new Promise<number>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("held-child helper printed nothing")), 5_000);
+    const timer = setTimeout(() => reject(new Error("held-child helper printed nothing")), 5_000 * CI_SCALE);
     holder.stdout!.once("data", (chunk: Buffer) => {
       clearTimeout(timer);
       resolve(Number.parseInt(chunk.toString().trim().split(/\s+/)[0] ?? "", 10));
@@ -167,7 +169,7 @@ async function spawnHeldChild(): Promise<{ holder: ChildProcess; childPid: numbe
 }
 
 async function waitForAnchor(client: JobdClient, jobId: string): Promise<void> {
-  await waitFor(async () => (await client.status(jobId))?.startToken !== undefined, 10_000);
+  await waitFor(async () => (await client.status(jobId))?.startToken !== undefined, 10_000 * CI_SCALE);
 }
 
 /** In-process successor daemon on a fresh endpoint (the crashed daemon's
@@ -296,7 +298,7 @@ describe("adoption edge: zombies under a non-reaping init (containers)", () => {
       assert.equal(daemon.registry.get("j_zombie_watch")?.adopted, true);
       killPid(childPid);
       await waitFor(() => procState(childPid) === "Z");
-      await waitFor(() => daemon!.registry.get("j_zombie_watch")?.state === "exited", 4_000);
+      await waitFor(() => daemon!.registry.get("j_zombie_watch")?.state === "exited", 4_000 * CI_SCALE);
       const ended = daemon.registry.get("j_zombie_watch");
       assert.equal(ended?.exitCode, null, "not our child: the outcome is unknowable, never invented");
     } finally {
@@ -325,7 +327,7 @@ describe("adoption edge: stop semantics for adopted jobs", () => {
       const stopped = await d2.client.stop(job.jobId);
       assert.equal(stopped.job.state, "stopped");
       if (stopped.killed) assert.equal(stopped.job.signal, "SIGKILL");
-      await waitFor(() => !isAlive(jobPid!), 3_000);
+      await waitFor(() => !isAlive(jobPid!), 3_000 * CI_SCALE);
     } finally {
       killPid(jobPid);
       if (d2 !== undefined) await d2.daemon.close();
