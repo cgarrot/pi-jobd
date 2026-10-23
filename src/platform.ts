@@ -156,6 +156,11 @@ export function processIdentity(pid: number): ProcessIdentity | undefined {
     if (process.platform === "linux") {
       const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
       const close = stat.lastIndexOf(")");
+      const state = stat.slice(close + 2, close + 3);
+      // A zombie has already exited; it lingers only because nobody reaped
+      // it (e.g. a container without a reaping init). kill(pid, 0) stays
+      // true for it, so the state char is the only honest tell.
+      if (state === "Z") return undefined;
       const fields = stat.slice(close + 2).trim().split(/\s+/);
       const startToken = fields[19]; // field 22 overall
       const boot = bootId();
@@ -163,6 +168,10 @@ export function processIdentity(pid: number): ProcessIdentity | undefined {
       return { startToken, bootId: boot };
     }
     if (process.platform === "darwin") {
+      // Same zombie tell as Linux, via ps: Z means already exited. BSD ps may
+      // append a suffix (e.g. "Z+"), so prefix-match instead of equality.
+      const state = execFileSync("ps", ["-o", "state=", "-p", String(pid)], { encoding: "utf8" }).trim();
+      if (state.startsWith("Z")) return undefined;
       const startToken = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
       const boot = bootId();
       if (startToken === "" || boot === undefined) return undefined;
