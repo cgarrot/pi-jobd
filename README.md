@@ -15,6 +15,27 @@ pi session ──run──▶ jobd (per user, 0600 IPC) ──spawn──▶ job
    └── status/log/stop ─┘                                   └── output → 0600 log
 ```
 
+## When does an agent use it? (three layers)
+
+Installing the package is not enough: the model must know **when** `job_run`
+beats `bash`. Three layers ship with it:
+
+1. **`promptSnippet`** — one line in the tool list, always visible.
+2. **`promptGuidelines`** on all seven tools — always injected. The decision
+   rule: use `job_run` when the command will take **more than ~60–90 s**, when
+   you must keep working while it runs, when it must **survive `/reload` or
+   session end**, or when a peer may need to stop it; use `bash` for short
+   commands whose output you need now, interactive/streaming commands, and
+   when the failure itself is the information. Plus: never poll in a loop,
+   `job_stop` instead of aborting the turn, pause caveats, honest states.
+3. **Skill `job-runner`** (`skills/job-runner/SKILL.md`, declared in
+   `pi.skills`) — the full playbook, loaded on demand when the task matches
+   its description ("long shell work, keep working while it runs, stop a long
+   job").
+
+Verified in a real session: the skill appears in the agent's skill list and
+the model states the threshold rule when asked.
+
 ## Quick start
 
 ```bash
