@@ -465,6 +465,10 @@ export class JobDaemon {
       return this.fail(req, "identity_mismatch", `job ${job.jobId} is lost; refusing to signal an unproven pid`);
     }
     if (isTerminal(job.state)) return this.respond(req, { job, killed: false } satisfies StopData);
+    if (job.pid !== undefined && isZombie(job.pid)) {
+      const ended = this.markEnded(job, "already exited (zombie, unreaped); outcome unknowable");
+      return this.respond(req, { job: ended, killed: false } satisfies StopData);
+    }
     if (!this.canSignal(job)) {
       const lost = this.markLost(job, "refusing to signal: process identity not proven (pid gone or reused)");
       return this.fail(req, "identity_mismatch", `job ${job.jobId} is ${lost.state}; refusing to signal an unproven pid`);
