@@ -1,0 +1,30 @@
+name: Release
+
+# Publishes to npm when a version tag (v*) is pushed.
+# REQUIRES the repository secret NPM_TOKEN. This repo does not have it yet:
+# do NOT push a v* tag until the secret exists — tag and publish must be one
+# atomic act (a tag whose publish fails would point at an artifact that does
+# not exist). prepublishOnly runs the full build + tests + smoke.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run ci
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

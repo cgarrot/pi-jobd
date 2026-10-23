@@ -1,5 +1,7 @@
 # pi-jobd — detached local job runner
 
+![CI](https://github.com/cgarrot/pi-jobd/actions/workflows/ci.yml/badge.svg)
+
 Long shell work (builds, renders, test sweeps) should not block an agent's
 turn. `pi-jobd` runs a command in a **detached process group**, supervises it
 from a **per-user daemon**, and reports honest states: `running` / `paused` /
@@ -141,6 +143,14 @@ const state = await client.status(job.jobId);
 const log = await client.log(job.jobId, 50);
 await client.stop(job.jobId);
 ```
+
+## Releasing
+
+`prepublishOnly` runs `npm run ci` (build + tests + smoke). The repository
+currently has **no `NPM_TOKEN` secret**, so do **not** push a `v*` tag yet:
+tag and publish must be one atomic act (a tag whose publish fails would point
+at an artifact that does not exist). Once the secret is added:
+`npm version 0.1.0` then `git push && git push --tags`.
 
 ## Test
 

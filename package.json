@@ -21,6 +21,7 @@
     "dist",
     "!dist/test",
     "index.ts",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE"
   ],
@@ -30,7 +31,8 @@
     "smoke": "node scripts/smoke.mjs",
     "ci": "npm run build && node scripts/run-tests.mjs && npm run smoke",
     "mesh:smoke": "node scripts/mesh-control-smoke.mjs",
-    "real:cases": "node scripts/real-cases.mjs"
+    "real:cases": "node scripts/real-cases.mjs",
+    "prepublishOnly": "npm run ci"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -40,5 +42,13 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cgarrot/pi-jobd.git"
+  },
+  "homepage": "https://github.com/cgarrot/pi-jobd#readme",
+  "bugs": {
+    "url": "https://github.com/cgarrot/pi-jobd/issues"
   }
 }
