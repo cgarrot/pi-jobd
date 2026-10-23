@@ -41,13 +41,17 @@ async function harness(): Promise<Harness> {
   return { dir, socketPath, daemon, client, close };
 }
 
+/** CI runners are slower: every reactive budget scales here (see CONTRIBUTING
+ *  in pi-mesh — one place, not one constant per test). */
+const CI_SCALE = process.env.CI ? 3 : 1;
+
 async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 3_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + timeoutMs * CI_SCALE;
   while (Date.now() < deadline) {
     if (await predicate()) return;
     await sleep(25);
   }
-  throw new Error("waitFor timed out");
+  throw new Error(`waitFor timed out (${timeoutMs * CI_SCALE}ms)`);
 }
 
 /** Windows can keep the log/registry handles busy for a few ms after a kill. */
