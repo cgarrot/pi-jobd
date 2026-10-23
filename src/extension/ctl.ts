@@ -80,7 +80,11 @@ async function handleRequest(req: { ctlId: string; action: string; target: strin
   try {
     if (req.action === "job_stop") {
       const result = await client.stop(req.target);
-      reply({ status: "stopped", settled: true, reason: result.killed ? "SIGKILL" : undefined });
+      reply({
+        status: "stopped",
+        settled: true,
+        reason: result.job.state === "exited" ? "already exited" : result.killed ? "SIGKILL" : undefined,
+      });
       return;
     }
     if (req.action === "job_pause") {

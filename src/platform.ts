@@ -117,11 +117,6 @@ export interface ProcessIdentity {
 }
 
 /**
- * Best-effort process identity for a future adoption phase. The MVP does not
- * adopt (a daemon restart marks jobs lost, fail-closed), but the primitive is
- * here so adoption can be added without another platform file.
- */
-/**
  * Boot id is constant for the life of a boot: cache it. On Windows this
  * matters — the old code spawned PowerShell twice per identity check (and
  * canSignal runs on every stop/pause/resume).
@@ -151,6 +146,34 @@ function bootId(): string | undefined {
   return cachedBootId;
 }
 
+/**
+ * OS process state character: Linux `/proc/<pid>/stat`, macOS `ps -o state=`.
+ * Windows has no zombie concept (undefined). Used to distinguish "already
+ * exited but unreaped" (Z) from a live process.
+ */
+export function processState(pid: number): string | undefined {
+  try {
+    if (process.platform === "linux") {
+      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+      const close = stat.lastIndexOf(")");
+      return stat.slice(close + 2, close + 3);
+    }
+    if (process.platform === "darwin") {
+      const out = execFileSync("ps", ["-o", "state=", "-p", String(pid)], { encoding: "utf8" }).trim();
+      return out.split(/\s+/)[0];
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/** True when the process has exited but is still unreaped. */
+export function isZombie(pid: number): boolean {
+  const state = processState(pid);
+  return state !== undefined && state.toUpperCase().startsWith("Z");
+}
+
 export function processIdentity(pid: number): ProcessIdentity | undefined {
   try {
     if (process.platform === "linux") {
@@ -168,11 +191,13 @@ export function processIdentity(pid: number): ProcessIdentity | undefined {
       return { startToken, bootId: boot };
     }
     if (process.platform === "darwin") {
-      // Same zombie tell as Linux, via ps: Z means already exited. BSD ps may
-      // append a suffix (e.g. "Z+"), so prefix-match instead of equality.
-      const state = execFileSync("ps", ["-o", "state=", "-p", String(pid)], { encoding: "utf8" }).trim();
-      if (state.startsWith("Z")) return undefined;
-      const startToken = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
+      // One ps for both fields (state + lstart): identity runs before every
+      // signal and every 2 s per adopted job, so avoid a second spawn.
+      const out = execFileSync("ps", ["-o", "state=,lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
+      const [state, ...rest] = out.split(/\s+/);
+      // BSD ps may append a suffix (e.g. "Z+"): prefix-match the zombie tell.
+      if (state === undefined || state === "" || state.startsWith("Z")) return undefined;
+      const startToken = rest.join(" ").trim();
       const boot = bootId();
       if (startToken === "" || boot === undefined) return undefined;
       return { startToken, bootId: boot };
