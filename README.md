@@ -66,6 +66,10 @@ pretends to have paused something.
   **and** boot id still match is re-attached (`adopted: true`) and can be
   stopped/paused normally. Identity is re-checked before **every** signal, so
   a reused pid is never signalled.
+- **zombie** — a process that has already exited but is still unreaped (a
+  container without a reaping init) is `exited` with `exitCode: null`, never
+  `lost`; the same applies when `stop`/`pause`/`resume` arrives during the
+  monitor window, and a live reused pid still fails closed as `lost`.
 - **`lost`** — the daemon restarted and cannot **prove** that the pid is still
   the same process (pid gone or reused). It refuses to guess:
   - the record says `lost`, `exitCode: null`, and a note;
