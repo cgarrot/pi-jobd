@@ -31,7 +31,13 @@ export interface ToolDefinition {
   promptSnippet?: string;
   /** Injected guidance (always present, unlike a skill): WHEN to reach for
    *  this tool, and what it must not be used for. */
-  promptGuidelines?: string | string[];
+  /**
+   * MUST be an array. pi's codemode calls `guidelines.flatMap(...)` directly
+   * (`dist/extensions/codemode/tool.js`), so a bare string throws
+   * "guidelines.flatMap is not a function" and the system prompt renders one
+   * bullet per CHARACTER. See pi-mesh#19.
+   */
+  promptGuidelines?: string[];
   parameters: Record<string, unknown>;
   execute: ToolExecuteFn;
 }
